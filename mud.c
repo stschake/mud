@@ -160,66 +160,16 @@ static inline int
 mud_encrypt_opt(const struct mud_crypto_key *k,
                 const struct mud_crypto_opt *c)
 {
-    if (k->aes) {
-        unsigned char npub[AEGIS256_NPUBBYTES] = {0};
-        memcpy(npub, c->dst, MUD_TIME_SIZE);
-        return aegis256_encrypt(
-            c->dst + MUD_TIME_SIZE,
-            NULL,
-            c->src,
-            c->size,
-            c->dst,
-            MUD_TIME_SIZE,
-            npub,
-            k->encrypt.key
-        );
-    } else {
-        unsigned char npub[crypto_aead_chacha20poly1305_NPUBBYTES] = {0};
-        memcpy(npub, c->dst, MUD_TIME_SIZE);
-        return crypto_aead_chacha20poly1305_encrypt(
-            c->dst + MUD_TIME_SIZE,
-            NULL,
-            c->src,
-            c->size,
-            c->dst,
-            MUD_TIME_SIZE,
-            NULL,
-            npub,
-            k->encrypt.key
-        );
-    }
+    memcpy(c->dst + MUD_TIME_SIZE, c->src, c->size);
+    return 0;
 }
 
 static inline int
 mud_decrypt_opt(const struct mud_crypto_key *k,
                 const struct mud_crypto_opt *c)
 {
-    if (k->aes) {
-        unsigned char npub[AEGIS256_NPUBBYTES] = {0};
-        memcpy(npub, c->src, MUD_TIME_SIZE);
-        return aegis256_decrypt(
-            c->dst,
-            NULL,
-            c->src + MUD_TIME_SIZE,
-            c->size - MUD_TIME_SIZE,
-            c->src, MUD_TIME_SIZE,
-            npub,
-            k->decrypt.key
-        );
-    } else {
-        unsigned char npub[crypto_aead_chacha20poly1305_NPUBBYTES] = {0};
-        memcpy(npub, c->src, MUD_TIME_SIZE);
-        return crypto_aead_chacha20poly1305_decrypt(
-            c->dst,
-            NULL,
-            NULL,
-            c->src + MUD_TIME_SIZE,
-            c->size - MUD_TIME_SIZE,
-            c->src, MUD_TIME_SIZE,
-            npub,
-            k->decrypt.key
-        );
-    }
+    memcpy(c->dst, c->src + MUD_TIME_SIZE, c->size - MUD_TIME_SIZE);
+    return 0;
 }
 
 static inline void
@@ -746,23 +696,13 @@ mud_encrypt(struct mud *mud, uint64_t now,
             unsigned char *dst, size_t dst_size,
             const unsigned char *src, size_t src_size)
 {
-    const size_t size = src_size + MUD_PKT_MIN_SIZE;
+    const size_t size = src_size + MUD_TIME_SIZE;
 
     if (size > dst_size)
         return 0;
 
-    const struct mud_crypto_opt opt = {
-        .dst = dst,
-        .src = src,
-        .size = src_size,
-    };
     mud_store(dst, now, MUD_TIME_SIZE);
-
-    if (mud->keyx.use_next) {
-        mud_encrypt_opt(&mud->keyx.next, &opt);
-    } else {
-        mud_encrypt_opt(&mud->keyx.current, &opt);
-    }
+    memcpy(dst + MUD_TIME_SIZE, src, src_size);
     return size;
 }
 
@@ -771,7 +711,7 @@ mud_decrypt(struct mud *mud,
             unsigned char *dst, size_t dst_size,
             const unsigned char *src, size_t src_size)
 {
-    const size_t size = src_size - MUD_PKT_MIN_SIZE;
+    const size_t size = src_size - MUD_TIME_SIZE;
 
     if (size > dst_size)
         return 0;
